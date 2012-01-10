@@ -131,9 +131,9 @@ end
         end
       end
       
-      validate "Single Sign On link" do
+      validate "SSO link" do
         timestamp = Time.now.to_i
-        authstring = user.to_s + ':' + sso_salt + ':' + timestamp.to_s
+        authstring = resource_id.to_s + ':' + sso_salt + ':' + timestamp.to_s
         token = Digest::SHA1.hexdigest(authstring)
         resp = addon.get("/heroku/resources/#{resource_id}?token=#{token}&timestamp=#{timestamp}")
         passed unless resp.code != "200"
