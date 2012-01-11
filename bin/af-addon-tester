@@ -1,8 +1,12 @@
+#!/usr/bin/env ruby
+
+lib = File.expand_path(File.dirname(__FILE__) + '/../lib')
+$LOAD_PATH.unshift(lib) if File.directory?(lib) && !$LOAD_PATH.include?(lib)
+
 require 'rubygems'
 require 'json'
-require 'restclient'
 require 'digest/sha1'
-Dir["lib/*.rb"].each {|file| require file }
+require 'restclient'
 
 addon_name = 'heroku'
 addon_config = ['HEROKU_URL', 'HEROKU_VAR1', 'HEROKU_VAR2']
@@ -41,33 +45,34 @@ end
     validate "Response params" do
       begin
         failed("Missing 'id'") if provision_info['id'].nil? || provision_info['id'] == ""
-        failed("Missing 'config'") if provision_info['config'].nil?
       rescue Exception => e 
         failed e.message
       end
       passed
     end
 
-    validate "All config keys are in manifest" do
-      provision_info['config'].each do |key, value|
-        unless addon_config.include? key; failed "#{key} not found in config"; end
+    unless provision_info['config'].nil?
+      validate "All config keys are in manifest" do
+        provision_info['config'].each do |key, value|
+          unless addon_config.include? key; failed "#{key} not found in config"; end
+        end
+      end
+    
+      validate "All manifest config keys are in response" do
+        addon_config.each do |key, value|
+          unless provision_info['config'].include? key; failed "#{key} not found in manifest"; end
+        end
+      end
+    
+      validate "All config keys are prefixed with addon name" do
+        config_prefix = "#{addon_name.upcase}_"
+        provision_info['config'].each do |key, value|
+          unless key.start_with? config_prefix; failed "#{key} does not begin with #{config_prefix}"; end
+        end
+        passed
       end
     end
     
-    validate "All manifest config keys are in response" do
-      addon_config.each do |key, value|
-        unless provision_info['config'].include? key; failed "#{key} not found in manifest"; end
-      end
-    end
-    
-    validate "All config keys are prefixed with addon name" do
-      config_prefix = "#{addon_name.upcase}_"
-      provision_info['config'].each do |key, value|
-        unless key.start_with? config_prefix; failed "#{key} does not begin with #{config_prefix}"; end
-      end
-      passed
-    end
-
     resource_id = provision_info['id']
     unless resource_id.nil?
       validate "Update resource" do
