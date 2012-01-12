@@ -8,10 +8,25 @@ require 'json'
 require 'digest/sha1'
 require 'af-addon-tester'
 
-manifest_path = File.expand_path(File.dirname(__FILE__) + '/../config/manifest.json')
-manifest_file = File.open(manifest_path, 'r')
-manifest_json = manifest_file.readlines.to_s
-manifest = JSON.parse(manifest_json)
+manifest_path = ARGV.first
+
+begin
+  manifest_file = File.open(File.expand_path(manifest_path), 'r')
+  manifest_json = manifest_file.readlines.to_s
+  manifest = JSON.parse(manifest_json)
+
+  raise "Missing id" if manifest['id'].nil?
+  raise "Missing api section" if manifest['api'].nil?
+  raise "Missing api password" if manifest['api']['password'].nil?
+  raise "Missing apt test url" if manifest['api']['test'].nil?
+  raise "Manifest must have atleast one plan" if manifest['api']['plans'].nil? || manifest['api']['plans'][0].nil? || manifest['api']['plans'][0]['id'].nil?
+  raise "missing api config_vars" if manifest['api']['config_vars'].nil?
+  raise "Missing api sso_salt" if manifest['api']['sso_salt'].nil?
+
+rescue Exception => e
+  puts bwhite "#{e.message}. Please specify a valid manifest file."
+  exit
+end
 
 callback_url = 'http://localhost:9990'
 config_prefix = manifest['id'].gsub('-','_').upcase + '_'

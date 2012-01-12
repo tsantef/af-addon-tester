@@ -1,0 +1,16 @@
+{
+  "id":"myaddon",
+  "api":{
+    "plans":[
+      {"id":"free"}
+    ],
+    "config_vars": {
+      "MYADDON_URL":"http://some.url.com",
+      "MYADDON_VAR1":"cats",
+      "MYADDON_VAR2":"dogs"
+    },
+    "test":"http://localhost:4567/myaddon/resources",
+    "password":"cavef6azebRewruvecuch",
+    "sso_salt":"8ouy3ayLEyOA7HLAKO2Yo"
+  }
+}

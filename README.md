@@ -11,14 +11,31 @@ Allows developers to test App Fog add-ons
 
     $ git clone git@github.com:tsantef/af-addon-tester.git
 
-2) Create a manifest.json in the 'config' folder
+2) Create a manifest.json that points to a test addon
+
+Example
+
+    {
+      "id":"myaddon",
+      "api":{
+        "plans":[
+          {"id":"free"}
+        ],
+        "config_vars": {
+          "MYADDON_URL":"http://some.url.com",
+          "MYADDON_VAR1":"cats",
+          "MYADDON_VAR2":"dogs"
+        },
+        "test":"http://localhost:4567/myaddon/resources",
+        "password":"cavef6azebRewruvecuch",
+        "sso_salt":"8ouy3ayLEyOA7HLAKO2Yo"
+      }
+    }
 
 
 ## Usage ##
 
-From the project folder type:
-
-    ruby run.rb
+    $ af-addon-tester <path to manifest>
 
 
 ## Meta ##
