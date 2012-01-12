@@ -17,6 +17,7 @@ begin
 
   raise "Missing id" if manifest['id'].nil?
   raise "Missing api section" if manifest['api'].nil?
+  raise "Missing api password" if manifest['api']['username'].nil?
   raise "Missing api password" if manifest['api']['password'].nil?
   raise "Missing apt test url" if manifest['api']['test'].nil?
   raise "Manifest must have atleast one plan" if manifest['api']['plans'].nil? || manifest['api']['plans'][0].nil? || manifest['api']['plans'][0]['id'].nil?
@@ -33,7 +34,7 @@ config_prefix = manifest['id'].gsub('-','_').upcase + '_'
 bad_user = 'bad_user'
 bad_password = 'bad_pass'
 
-addon = Rest.new(manifest['api']['test'], manifest['id'], manifest['api']['password'])
+addon = Rest.new(manifest['api']['test'], manifest['api']['username'], manifest['api']['password'])
 resp = nil
 
 validate "Provisioning" do
@@ -120,7 +121,7 @@ end
         _, json = out.split("\r\n\r\n")
         begin
           callback_info = JSON.parse(json)
-        rescue Exception => e 
+        rescue Exception => e
           failed e.message
         end
         isValidCallback = true
