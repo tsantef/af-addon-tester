@@ -46,7 +46,7 @@ If cloned:
 
     $ bin/af-addon-tester <path to manifest>
 
-If Gem
+If Gem:
 
     $ $ af-addon-tester <path to manifest>
 
