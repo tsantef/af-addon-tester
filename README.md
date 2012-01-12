@@ -3,7 +3,7 @@ af-addon-tester
 
 <img src="http://appfog.com/images/logo.png" />
 
-Allows developers to test App Fog add-ons
+Allows developers to test add-ons compatible with App Fog
 
 ## Setup ##
 
@@ -48,7 +48,7 @@ If cloned:
 
 If Gem:
 
-    $ $ af-addon-tester <path to manifest>
+    $ af-addon-tester <path to manifest>
 
 
 ## Meta ##
