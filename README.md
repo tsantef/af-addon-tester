@@ -7,14 +7,18 @@ Allows developers to test App Fog add-ons
 
 ## Setup ##
 
-Install it like any Ruby Gem:
+1) Clone
 
-    $ gem install af-addon-tester
+    $ git clone git@github.com:tsantef/af-addon-tester.git
+
+2) Create a manifest.json in the 'config' folder
 
 
 ## Usage ##
 
-    $ af-addon-tester
+From the project folder type:
+
+    ruby run.rb
 
 
 ## Meta ##
