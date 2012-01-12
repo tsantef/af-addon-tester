@@ -6,27 +6,26 @@ $LOAD_PATH.unshift(lib) if File.directory?(lib) && !$LOAD_PATH.include?(lib)
 require 'rubygems'
 require 'json'
 require 'digest/sha1'
-require 'restclient'
+require 'af-addon-tester'
 
-addon_name = 'heroku'
-addon_config = ['HEROKU_URL', 'HEROKU_VAR1', 'HEROKU_VAR2']
-sso_salt = "0hsvrk6MMZH9xZnK"
-host = 'http://localhost:4567'
+manifest_path = File.expand_path(File.dirname(__FILE__) + '/../config/manifest.json')
+manifest_file = File.open(manifest_path, 'r')
+manifest_json = manifest_file.readlines.to_s
+manifest = JSON.parse(manifest_json)
+
 callback_url = 'http://localhost:9990'
-customer_id = 'heroku_id'
-user = 'myaddon'
-password = 'NVUQ1OqNtuc74HiE'
+config_prefix = manifest['id'].gsub('-','_').upcase + '_'
 bad_user = 'bad_user'
 bad_password = 'bad_pass'
 
-addon = Rest.new(host, user, password)
+addon = Rest.new(manifest['api']['test'], manifest['id'], manifest['api']['password'])
 resp = nil
 
 validate "Provisioning" do
   params = {}
-  payload = { customer_id => user, 'plan' => 'free', 'callback_url' => callback_url, 'options' => '{}' }
-  resp = addon.post("/heroku/resources", params, JSON.generate(payload))
-  failed("response code: #{resp.code}") if resp.code != "200"
+  payload = { 'customer_id' => manifest['id'], 'plan' => manifest['api']['plans'][0]['id'], 'callback_url' => callback_url, 'options' => '{}' }
+  resp = addon.post(manifest['api']['test'], params, JSON.generate(payload))
+  failed("response code: #{resp.code} - #{resp.message}") if resp.code != "200"
   passed
 end
 
@@ -40,7 +39,7 @@ end
     end
     passed
   end
-  
+
   unless provision_info.nil?
     validate "Response params" do
       begin
@@ -54,35 +53,34 @@ end
     unless provision_info['config'].nil?
       validate "All config keys are in manifest" do
         provision_info['config'].each do |key, value|
-          unless addon_config.include? key; failed "#{key} not found in config"; end
+          unless manifest['api']['config_vars'].include? key; failed "#{key} not found in config"; end
         end
       end
-    
+
       validate "All manifest config keys are in response" do
-        addon_config.each do |key, value|
+        manifest['api']['config_vars'].each do |key, value|
           unless provision_info['config'].include? key; failed "#{key} not found in manifest"; end
         end
       end
-    
+
       validate "All config keys are prefixed with addon name" do
-        config_prefix = "#{addon_name.upcase}_"
         provision_info['config'].each do |key, value|
           unless key.start_with? config_prefix; failed "#{key} does not begin with #{config_prefix}"; end
         end
         passed
       end
     end
-    
+
     resource_id = provision_info['id']
     unless resource_id.nil?
       validate "Update resource" do
         params = {}
         payload = { 'plan' => 'paid', 'callback_url' => callback_url, 'options' => '{}' }
-        resp = addon.put("/heroku/resources/#{resource_id}", params, JSON.generate(payload))
+        resp = addon.put(manifest['api']['test'] + "/#{resource_id}", params, JSON.generate(payload))
         failed("response code: #{resp.code}") if resp.code != "200"
         passed
       end
-      
+
       READLEN = 1024 * 10
       reader, writer = IO.pipe
       out = nil
@@ -100,7 +98,7 @@ end
         out = reader.readpartial(READLEN)
         passed
       end
-  
+
       callback_info = nil    
       isValidCallback = false
       validate "Valid callback response" do
@@ -113,58 +111,57 @@ end
         isValidCallback = true
         passed
       end
-      
+
       if isValidCallback
         validate "All callback config keys are in manifest" do
           callback_info['config'].each do |key, value|
-            unless addon_config.include? key; failed "#{key} not found in config"; end
+            unless manifest['api']['config_vars'].include? key; failed "#{key} not found in config"; end
           end
         end
 
         validate "All callback manifest config keys are in response" do
-          addon_config.each do |key, value|
+          manifest['api']['config_vars'].each do |key, value|
             unless callback_info['config'].include? key; failed "#{key} not found in manifest"; end
           end
         end
 
         validate "All callback config keys are prefixed with addon name" do
-          config_prefix = "#{addon_name.upcase}_"
           callback_info['config'].each do |key, value|
             unless key.start_with? config_prefix; failed "#{key} does not begin with #{config_prefix}"; end
           end
           passed
         end
       end
-      
+
       validate "SSO link" do
         timestamp = Time.now.to_i
-        authstring = resource_id.to_s + ':' + sso_salt + ':' + timestamp.to_s
+        authstring = resource_id.to_s + ':' + manifest['api']['sso_salt'] + ':' + timestamp.to_s
         token = Digest::SHA1.hexdigest(authstring)
-        resp = addon.get("/heroku/resources/#{resource_id}?token=#{token}&timestamp=#{timestamp}")
+        resp = addon.get(manifest['api']['test'] + "/#{resource_id}?token=#{token}&timestamp=#{timestamp}")
         passed unless resp.code != "200"
       end
 
       validate "Deprovision" do
         params = {}
-        payload = { customer_id => user, 'plan' => 'free', 'callback_url' => callback_url, 'options' => '{}' }
-        resp = addon.delete("/heroku/resources/#{resource_id}", params, JSON.generate(payload))
+        payload = { 'customer_id' => manifest['id'], 'plan' => manifest['api']['plans'][0]['id'], 'callback_url' => callback_url, 'options' => '{}' }
+        resp = addon.delete(manifest['api']['test'] + "/#{resource_id}", params, JSON.generate(payload))
         failed("response code: #{resp.code}") if resp.code != "200"
         passed
       end
-      
+
     end
   end
 
 else
-  failed
+  false
 end
 
 validate "Bad credentials test" do
   params = {}
-  payload = { customer_id => user, 'plan' => 'free', 'callback_url' => callback_url, 'options' => '{}' }
+  payload = { 'customer_id' => manifest['id'], 'plan' => manifest['api']['plans'][0]['id'], 'callback_url' => callback_url, 'options' => '{}' }
 
-  addon_bad_auth = Rest.new(host, bad_user, bad_password)
-  resp = addon.post("/heroku/resources/", params, JSON.generate(payload))
+  addon_bad_auth = Rest.new(manifest['api']['test'], bad_user, bad_password)
+  resp = addon.post(manifest['api']['test'], params, JSON.generate(payload))
 
   failed if resp.code == "200"
   passed

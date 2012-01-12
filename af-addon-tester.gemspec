@@ -7,7 +7,7 @@ Gem::Specification.new do |s|
   s.version     = AppFog::AddonTester::VERSION
   s.default_executable = %q{af-addon-tester}
   s.authors     = ["Tim Santeford"]
-  s.email       = ["tsantef@gmail.com"]
+  s.email       = ["tim@phpfog.com"]
   s.homepage    = ""
   s.summary     = %q{Tests App Fog Add-ons}
   s.description = %q{Allows developers to test App Fog add-ons}
