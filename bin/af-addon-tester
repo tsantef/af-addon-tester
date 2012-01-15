@@ -7,8 +7,11 @@ require 'rubygems'
 require 'json'
 require 'digest/sha1'
 require 'af-addon-tester'
+require 'restclient'
 
-manifest_path = ARGV.first
+manifest_path = ARGV.last
+
+do_asyc = ARGV.include?('-a')
 
 begin
   manifest_file = File.open(File.expand_path(manifest_path), 'r')
@@ -20,7 +23,7 @@ begin
   raise "Missing api password" if manifest['api']['username'].nil?
   raise "Missing api password" if manifest['api']['password'].nil?
   raise "Missing apt test url" if manifest['api']['test'].nil?
-  raise "Manifest must have atleast one plan" if manifest['api']['plans'].nil? || manifest['api']['plans'][0].nil? || manifest['api']['plans'][0]['id'].nil?
+  raise "Manifest must have atleast one plan" if manifest['plans'].nil? || manifest['plans'][0].nil? || manifest['plans'][0]['id'].nil?
   raise "missing api config_vars" if manifest['api']['config_vars'].nil?
   raise "Missing api sso_salt" if manifest['api']['sso_salt'].nil?
 
@@ -34,18 +37,28 @@ config_prefix = manifest['id'].gsub('-','_').upcase + '_'
 bad_user = 'bad_user'
 bad_password = 'bad_pass'
 
-addon = Rest.new(manifest['api']['test'], manifest['api']['username'], manifest['api']['password'])
+addon = RestClient::Resource.new manifest['api']['test'], {:user => manifest['api']['username'], :password => manifest['api']['password']}
+  
 resp = nil
+code = nil
 
 validate "Provisioning" do
   params = {}
-  payload = { 'customer_id' => manifest['id'], 'plan' => manifest['api']['plans'][0]['id'], 'callback_url' => callback_url, 'options' => '{}' }
-  resp = addon.post(manifest['api']['test'], params, JSON.generate(payload))
-  failed("response code: #{resp.code} - #{resp.message}") if resp.code != "200"
+  payload = { 'customer_id' => manifest['id'], 'plan' => manifest['plans'][0]['id'], 'callback_url' => callback_url, 'options' => '{}' }
+
+  begin
+    resp = addon['/provider/resources'].post JSON.generate(payload), params
+    failed("response code: #{resp.code}") if resp.code != 200
+    code = 200
+  rescue RestClient::ExceptionWithResponse => rest_err
+    code = rest_err.http_code
+    failed("response code: #{rest_err.message}") 
+  end
+  
   passed
 end
 
-  if resp.code == "200"
+  if code == 200
   provision_info = nil
   validate "Valid JSON response" do
     begin
@@ -92,76 +105,85 @@ end
       validate "Update resource" do
         params = {}
         payload = { 'plan' => 'paid', 'callback_url' => callback_url, 'options' => '{}' }
-        resp = addon.put(manifest['api']['test'] + "/#{resource_id}", params, JSON.generate(payload))
-        failed("response code: #{resp.code}") if resp.code != "200"
-        passed
-      end
-
-      READLEN = 1024 * 10
-      reader, writer = IO.pipe
-      out = nil
-      validate "Callback" do
-        child = fork do
-          reader.close
-          server = TCPServer.open(9990)
-          client = server.accept
-          writer.write(client.readpartial(READLEN))
-          client.write("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
-          client.close
-          writer.close
-        end
-        sleep(1)
-        out = reader.readpartial(READLEN)
-        passed
-      end
-
-      callback_info = nil    
-      isValidCallback = false
-      validate "Valid callback response" do
-        _, json = out.split("\r\n\r\n")
         begin
-          callback_info = JSON.parse(json)
-        rescue Exception => e
-          failed e.message
+          resp = addon["/provider/resources/#{resource_id}"].put JSON.generate(payload), params
+          failed("response code: #{resp.code}") if resp.code != 200
+        rescue RestClient::ExceptionWithResponse => rest_err
+          failed("response code: #{rest_err.message}") 
         end
-        isValidCallback = true
         passed
       end
 
-      if isValidCallback
-        validate "All callback config keys are in manifest" do
-          callback_info['config'].each do |key, value|
-            unless manifest['api']['config_vars'].include? key; failed "#{key} not found in config"; end
+      if do_asyc
+        READLEN = 1024 * 10
+        reader, writer = IO.pipe
+        out = nil
+        validate "Callback" do
+          child = fork do
+            reader.close
+            server = TCPServer.open(9990)
+            client = server.accept
+            writer.write(client.readpartial(READLEN))
+            client.write("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
+            client.close
+            writer.close
           end
-        end
-
-        validate "All callback manifest config keys are in response" do
-          manifest['api']['config_vars'].each do |key, value|
-            unless callback_info['config'].include? key; failed "#{key} not found in manifest"; end
-          end
-        end
-
-        validate "All callback config keys are prefixed with addon name" do
-          callback_info['config'].each do |key, value|
-            unless key.start_with? config_prefix; failed "#{key} does not begin with #{config_prefix}"; end
-          end
+          sleep(1)
+          out = reader.readpartial(READLEN)
           passed
         end
-      end
 
+        callback_info = nil    
+        isValidCallback = false
+        validate "Valid callback response" do
+          _, json = out.split("\r\n\r\n")
+          begin
+            callback_info = JSON.parse(json)
+          rescue Exception => e
+            failed e.message
+          end
+          isValidCallback = true
+          passed
+        end
+
+        if isValidCallback
+          validate "All callback config keys are in manifest" do
+            callback_info['config'].each do |key, value|
+              unless manifest['api']['config_vars'].include? key; failed "#{key} not found in config"; end
+            end
+          end
+
+          validate "All callback manifest config keys are in response" do
+            manifest['api']['config_vars'].each do |key, value|
+              unless callback_info['config'].include? key; failed "#{key} not found in manifest"; end
+            end
+          end
+
+          validate "All callback config keys are prefixed with addon name" do
+            callback_info['config'].each do |key, value|
+              unless key.start_with? config_prefix; failed "#{key} does not begin with #{config_prefix}"; end
+            end
+            passed
+          end
+        end
+      end
+      
       validate "SSO link" do
         timestamp = Time.now.to_i
         authstring = resource_id.to_s + ':' + manifest['api']['sso_salt'] + ':' + timestamp.to_s
         token = Digest::SHA1.hexdigest(authstring)
-        resp = addon.get(manifest['api']['test'] + "/#{resource_id}?token=#{token}&timestamp=#{timestamp}")
-        passed unless resp.code != "200"
+        begin
+          resp = addon["/provider/resources/#{resource_id}?token=#{token}&timestamp=#{timestamp}"].get
+          failed("response code: #{resp.code}") if resp.code != 200
+        rescue RestClient::ExceptionWithResponse => rest_err
+          failed("response code: #{rest_err.message}") 
+        end
+        passed
       end
 
       validate "Deprovision" do
-        params = {}
-        payload = { 'customer_id' => manifest['id'], 'plan' => manifest['api']['plans'][0]['id'], 'callback_url' => callback_url, 'options' => '{}' }
-        resp = addon.delete(manifest['api']['test'] + "/#{resource_id}", params, JSON.generate(payload))
-        failed("response code: #{resp.code}") if resp.code != "200"
+        resp = addon["/provider/resources/#{resource_id}"].delete
+        failed("response code: #{resp.code}") if resp.code != 200
         passed
       end
 
@@ -174,11 +196,16 @@ end
 
 validate "Bad credentials test" do
   params = {}
-  payload = { 'customer_id' => manifest['id'], 'plan' => manifest['api']['plans'][0]['id'], 'callback_url' => callback_url, 'options' => '{}' }
+  payload = { 'customer_id' => manifest['id'], 'plan' => manifest['plans'][0]['id'], 'callback_url' => callback_url, 'options' => '{}' }
 
-  addon_bad_auth = Rest.new(manifest['api']['test'], bad_user, bad_password)
-  resp = addon.post(manifest['api']['test'], params, JSON.generate(payload))
+  addon_bad_auth = RestClient::Resource.new manifest['api']['test'], { :username => bad_user, :password => bad_password }
 
-  failed if resp.code == "200"
-  passed
+  code = nil
+  begin
+    resp = addon_bad_auth["/provider/resources"].post JSON.generate(payload), params
+    code = resp.code
+  rescue RestClient::ExceptionWithResponse => rest_err
+    code = rest_err.http_code
+  end
+  passed unless code == 200
 end
