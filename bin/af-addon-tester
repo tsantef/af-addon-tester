@@ -102,7 +102,7 @@ end
     resource_id = provision_info['id']
     unless resource_id.nil?
       validate "Update resource" do
-        payload = { 'customer_id' => manifest['id'], 'plan' => 'sandbox' }
+        payload = { 'customer_id' => manifest['id'], 'plan' => manifest['plans'][0]['id'] }
         begin
           resp = addon["/provider/resources/#{resource_id}"].put JSON.generate(payload), headers
           failed("response code: #{resp.code}") if resp.code != 200
