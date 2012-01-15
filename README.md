@@ -24,10 +24,10 @@ Example
 
     {
       "id":"myaddon",
+	  "plans":[
+        {"id":"free"}
+      ],
       "api":{
-        "plans":[
-          {"id":"free"}
-        ],
         "config_vars": {
           "MYADDON_URL":"http://some.url.com",
           "MYADDON_VAR1":"cats",
