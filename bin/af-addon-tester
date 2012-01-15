@@ -12,6 +12,7 @@ require 'restclient'
 manifest_path = ARGV.last
 
 do_asyc = ARGV.include?('-a')
+username = nil
 
 begin
   manifest_file = File.open(File.expand_path(manifest_path), 'r')
@@ -19,8 +20,8 @@ begin
   manifest = JSON.parse(manifest_json)
 
   raise "Missing id" if manifest['id'].nil?
+  username = manifest['api']['username'] || manifest['id']
   raise "Missing api section" if manifest['api'].nil?
-  raise "Missing api password" if manifest['api']['username'].nil?
   raise "Missing api password" if manifest['api']['password'].nil?
   raise "Missing apt test url" if manifest['api']['test'].nil?
   raise "Manifest must have atleast one plan" if manifest['plans'].nil? || manifest['plans'][0].nil? || manifest['plans'][0]['id'].nil?
@@ -37,24 +38,22 @@ config_prefix = manifest['id'].gsub('-','_').upcase + '_'
 bad_user = 'bad_user'
 bad_password = 'bad_pass'
 
-addon = RestClient::Resource.new manifest['api']['test'], {:user => manifest['api']['username'], :password => manifest['api']['password']}
+addon = RestClient::Resource.new manifest['api']['test'], {:user => username, :password => manifest['api']['password']}
+headers = { :accept => "application/json", :content_type => "application/json", "User-Agent" => "af-addon-tester/#{VERSION}" }
   
 resp = nil
 code = nil
 
 validate "Provisioning" do
-  params = {}
   payload = { 'customer_id' => manifest['id'], 'plan' => manifest['plans'][0]['id'], 'callback_url' => callback_url, 'options' => '{}' }
-
   begin
-    resp = addon['/provider/resources'].post JSON.generate(payload), params
+    resp = addon['/provider/resources'].post JSON.generate(payload), headers
     failed("response code: #{resp.code}") if resp.code != 200
     code = 200
   rescue RestClient::ExceptionWithResponse => rest_err
     code = rest_err.http_code
     failed("response code: #{rest_err.message}") 
   end
-  
   passed
 end
 
@@ -103,10 +102,9 @@ end
     resource_id = provision_info['id']
     unless resource_id.nil?
       validate "Update resource" do
-        params = {}
-        payload = { 'plan' => 'paid', 'callback_url' => callback_url, 'options' => '{}' }
+        payload = { 'customer_id' => manifest['id'], 'plan' => 'sandbox' }
         begin
-          resp = addon["/provider/resources/#{resource_id}"].put JSON.generate(payload), params
+          resp = addon["/provider/resources/#{resource_id}"].put JSON.generate(payload), headers
           failed("response code: #{resp.code}") if resp.code != 200
         rescue RestClient::ExceptionWithResponse => rest_err
           failed("response code: #{rest_err.message}") 
@@ -172,8 +170,10 @@ end
         timestamp = Time.now.to_i
         authstring = resource_id.to_s + ':' + manifest['api']['sso_salt'] + ':' + timestamp.to_s
         token = Digest::SHA1.hexdigest(authstring)
+        addon_sso = RestClient::Resource.new manifest['api']['test']
+        sso_headers = { :accept => "text/html", :content_type => "text/html", "User-Agent" => "af-addon-tester/#{VERSION}" }
         begin
-          resp = addon["/provider/resources/#{resource_id}?token=#{token}&timestamp=#{timestamp}"].get
+          resp = addon_sso["/provider/resources/#{resource_id}?token=#{token}&timestamp=#{timestamp}"].get sso_headers
           failed("response code: #{resp.code}") if resp.code != 200
         rescue RestClient::ExceptionWithResponse => rest_err
           failed("response code: #{rest_err.message}") 
@@ -181,11 +181,11 @@ end
         passed
       end
 
-      validate "Deprovision" do
-        resp = addon["/provider/resources/#{resource_id}"].delete
-        failed("response code: #{resp.code}") if resp.code != 200
-        passed
-      end
+     # validate "Deprovision" do
+      #  resp = addon["/provider/resources/#{resource_id}"].delete
+      #  failed("response code: #{resp.code}") if resp.code != 200
+      #  passed
+      #end
 
     end
   end
@@ -195,14 +195,13 @@ else
 end
 
 validate "Bad credentials test" do
-  params = {}
   payload = { 'customer_id' => manifest['id'], 'plan' => manifest['plans'][0]['id'], 'callback_url' => callback_url, 'options' => '{}' }
 
   addon_bad_auth = RestClient::Resource.new manifest['api']['test'], { :username => bad_user, :password => bad_password }
 
   code = nil
   begin
-    resp = addon_bad_auth["/provider/resources"].post JSON.generate(payload), params
+    resp = addon_bad_auth["/provider/resources"].post JSON.generate(payload), headers
     code = resp.code
   rescue RestClient::ExceptionWithResponse => rest_err
     code = rest_err.http_code
