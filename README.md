@@ -33,7 +33,7 @@ Example
           "MYADDON_VAR1":"cats",
           "MYADDON_VAR2":"dogs"
         },
-        "test":"http://localhost:4567/myaddon/resources",
+        "test":"http://localhost:4567",
         "password":"cavef6azebRewruvecuch",
         "sso_salt":"8ouy3ayLEyOA7HLAKO2Yo"
       }
