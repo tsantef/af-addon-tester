@@ -9,7 +9,8 @@
       "MYADDON_VAR1":"cats",
       "MYADDON_VAR2":"dogs"
     },
-    "test":"http://localhost:4567",
+    "test":"http://localhost:4567/",
+    "path":"/provider/resources",
     "password":"NVUQ1OqNtuc74HiE",
     "sso_salt":"8ouy3ayLEyOA7HLAKO2Yo"
   }

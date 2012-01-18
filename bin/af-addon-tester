@@ -27,7 +27,6 @@ begin
   raise "Manifest must have atleast one plan" if manifest['plans'].nil? || manifest['plans'][0].nil? || manifest['plans'][0]['id'].nil?
   raise "missing api config_vars" if manifest['api']['config_vars'].nil?
   raise "Missing api sso_salt" if manifest['api']['sso_salt'].nil?
-
 rescue Exception => e
   puts bwhite "#{e.message}. Please specify a valid manifest file."
   exit
@@ -37,22 +36,23 @@ callback_url = 'http://localhost:9990'
 config_prefix = manifest['id'].gsub('-','_').upcase + '_'
 bad_user = 'bad_user'
 bad_password = 'bad_pass'
+resources_path = (manifest['api']['path'] || 'appfog/resources').gsub(/^\/+/,'')
 
 addon = RestClient::Resource.new manifest['api']['test'], {:user => username, :password => manifest['api']['password']}
 headers = { :accept => "application/json", :content_type => "application/json", "User-Agent" => "af-addon-tester/#{VERSION}" }
-  
+
 resp = nil
 code = nil
 
 validate "Provisioning" do
-  payload = { 'customer_id' => manifest['id'], 'plan' => manifest['plans'][0]['id'], 'callback_url' => callback_url, 'options' => '{}' }
+  payload = { 'customer_id' => "test@test.com", 'plan' => 'test', 'callback_url' => callback_url, 'options' => '{}' }
   begin
-    resp = addon['/provider/resources'].post JSON.generate(payload), headers
+    resp = addon[resources_path].post JSON.generate(payload), headers
     failed("response code: #{resp.code}") if resp.code != 200
-    code = 200
+    code = resp.code
   rescue RestClient::ExceptionWithResponse => rest_err
     code = rest_err.http_code
-    failed("response code: #{rest_err.message}") 
+    failed("response code: #{rest_err.message}")
   end
   passed
 end
@@ -62,7 +62,7 @@ end
   validate "Valid JSON response" do
     begin
       provision_info = JSON.parse(resp.body)
-    rescue Exception => e 
+    rescue Exception => e
       failed e.message
     end
     passed
@@ -72,7 +72,7 @@ end
     validate "Response params" do
       begin
         failed("Missing 'id'") if provision_info['id'].nil? || provision_info['id'] == ""
-      rescue Exception => e 
+      rescue Exception => e
         failed e.message
       end
       passed
@@ -104,10 +104,10 @@ end
       validate "Update resource" do
         payload = { 'customer_id' => manifest['id'], 'plan' => manifest['plans'][0]['id'] }
         begin
-          resp = addon["/provider/resources/#{resource_id}"].put JSON.generate(payload), headers
+          resp = addon[File.join(resources_path, resource_id.to_s)].put JSON.generate(payload), headers
           failed("response code: #{resp.code}") if resp.code != 200
         rescue RestClient::ExceptionWithResponse => rest_err
-          failed("response code: #{rest_err.message}") 
+          failed("response code: #{rest_err.message}")
         end
         passed
       end
@@ -131,7 +131,7 @@ end
           passed
         end
 
-        callback_info = nil    
+        callback_info = nil
         isValidCallback = false
         validate "Valid callback response" do
           _, json = out.split("\r\n\r\n")
@@ -165,7 +165,7 @@ end
           end
         end
       end
-      
+
       validate "SSO link" do
         timestamp = Time.now.to_i
         authstring = resource_id.to_s + ':' + manifest['api']['sso_salt'] + ':' + timestamp.to_s
@@ -173,19 +173,19 @@ end
         addon_sso = RestClient::Resource.new manifest['api']['test']
         sso_headers = { :accept => "text/html", :content_type => "text/html", "User-Agent" => "af-addon-tester/#{VERSION}" }
         begin
-          resp = addon_sso["/provider/resources/#{resource_id}?token=#{token}&timestamp=#{timestamp}"].get sso_headers
+          resp = addon_sso[File.join(resources_path, resource_id.to_s) + "?token=#{token}&timestamp=#{timestamp}"].get sso_headers
           failed("response code: #{resp.code}") if resp.code != 200
         rescue RestClient::ExceptionWithResponse => rest_err
-          failed("response code: #{rest_err.message}") 
+          failed("response code: #{rest_err.message}")
         end
         passed
       end
 
-     # validate "Deprovision" do
-      #  resp = addon["/provider/resources/#{resource_id}"].delete
-      #  failed("response code: #{resp.code}") if resp.code != 200
-      #  passed
-      #end
+     validate "Deprovision" do
+        resp = addon[File.join(resources_path, resource_id.to_s)].delete
+        failed("response code: #{resp.code}") if resp.code != 200
+        passed
+      end
 
     end
   end
@@ -201,7 +201,7 @@ validate "Bad credentials test" do
 
   code = nil
   begin
-    resp = addon_bad_auth["/provider/resources"].post JSON.generate(payload), headers
+    resp = addon_bad_auth[File.join(resources_path, resource_id.to_s)].post JSON.generate(payload), headers
     code = resp.code
   rescue RestClient::ExceptionWithResponse => rest_err
     code = rest_err.http_code
