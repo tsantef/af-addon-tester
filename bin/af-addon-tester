@@ -173,8 +173,9 @@ end
         addon_sso = RestClient::Resource.new manifest['api']['test']
         sso_headers = { :accept => "text/html", :content_type => "text/html", "User-Agent" => "af-addon-tester/#{VERSION}" }
         begin
+          expected = [200, 301, 302, 303, 304, 307]
           resp = addon_sso[File.join(resources_path, resource_id.to_s) + "?token=#{token}&timestamp=#{timestamp}"].get sso_headers
-          failed("response code: #{resp.code}") if resp.code != 200
+          failed("response code: #{resp.code}") if !expected.include?(resp.code)
         rescue RestClient::ExceptionWithResponse => rest_err
           failed("response code: #{rest_err.message}")
         end
