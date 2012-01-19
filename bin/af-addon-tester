@@ -8,6 +8,9 @@ require 'json'
 require 'digest/sha1'
 require 'af-addon-tester'
 require 'restclient'
+require 'uuid'
+
+puts "AppFog Addon Tester v#{AppFog::AddonTester::VERSION}"
 
 manifest_path = ARGV.last
 
@@ -20,7 +23,6 @@ begin
   manifest = JSON.parse(manifest_json)
 
   raise "Missing id" if manifest['id'].nil?
-  username = manifest['api']['username'] || manifest['id']
   raise "Missing api section" if manifest['api'].nil?
   raise "Missing api password" if manifest['api']['password'].nil?
   raise "Missing apt test url" if manifest['api']['test'].nil?
@@ -32,20 +34,37 @@ rescue Exception => e
   exit
 end
 
+customer_id = "phpfog#{UUID.new.generate}@appfog.com"
 callback_url = 'http://localhost:9990'
+plan = manifest['plans'][0]['id']
 config_prefix = manifest['id'].gsub('-','_').upcase + '_'
+username = manifest['api']['username'] || manifest['id']
+password = manifest['api']['password']
 bad_user = 'bad_user'
 bad_password = 'bad_pass'
+resource_host = manifest['api']['test']
 resources_path = (manifest['api']['path'] || 'appfog/resources').gsub(/^\/+/,'')
+sso_salt = manifest['api']['sso_salt']
 
-addon = RestClient::Resource.new manifest['api']['test'], {:user => username, :password => manifest['api']['password']}
+puts ""
+puts "  Target: #{bwhite(resource_host + resources_path)}"
+puts "  Customer ID: #{bwhite(customer_id)}"
+puts "  Plan: #{bwhite(manifest['plans'][0]['id'])}"
+puts "  Callback URL: #{bwhite(callback_url)}"
+puts "  Config Prefix: #{bwhite(config_prefix)}"
+puts "  Basic Auth User: #{bwhite(username)}"
+puts "  Basic Auth Password: #{bwhite(password[0..2]+password[3..-1].gsub(/./,'*'))}"
+puts "  SSO Salt: #{bwhite(sso_salt[0..2]+sso_salt[3..-1].gsub(/./,'*'))}"
+puts ""
+
+addon = RestClient::Resource.new resource_host, {:user => username, :password => password}
 headers = { :accept => "application/json", :content_type => "application/json", "User-Agent" => "af-addon-tester/#{VERSION}" }
 
 resp = nil
 code = nil
 
 validate "Provisioning" do
-  payload = { 'customer_id' => "test@test.com", 'plan' => 'test', 'callback_url' => callback_url, 'options' => '{}' }
+  payload = { 'customer_id' => customer_id, 'plan' => plan, 'callback_url' => callback_url, 'options' => '{}' }
   begin
     resp = addon[resources_path].post JSON.generate(payload), headers
     failed("response code: #{resp.code}") if resp.code != 200
@@ -102,7 +121,7 @@ end
     resource_id = provision_info['id']
     unless resource_id.nil?
       validate "Update resource" do
-        payload = { 'customer_id' => manifest['id'], 'plan' => manifest['plans'][0]['id'] }
+        payload = { 'customer_id' => customer_id, 'plan' => plan }
         begin
           resp = addon[File.join(resources_path, resource_id.to_s)].put JSON.generate(payload), headers
           failed("response code: #{resp.code}") if resp.code != 200
@@ -168,9 +187,9 @@ end
 
       validate "SSO link" do
         timestamp = Time.now.to_i
-        authstring = resource_id.to_s + ':' + manifest['api']['sso_salt'] + ':' + timestamp.to_s
+        authstring = resource_id.to_s + ':' + sso_salt + ':' + timestamp.to_s
         token = Digest::SHA1.hexdigest(authstring)
-        addon_sso = RestClient::Resource.new manifest['api']['test']
+        addon_sso = RestClient::Resource.new resource_host
         sso_headers = { :accept => "text/html", :content_type => "text/html", "User-Agent" => "af-addon-tester/#{VERSION}" }
         begin
           expected = [200, 301, 302, 303, 304, 307]
@@ -196,9 +215,9 @@ else
 end
 
 validate "Bad credentials test" do
-  payload = { 'customer_id' => manifest['id'], 'plan' => manifest['plans'][0]['id'], 'callback_url' => callback_url, 'options' => '{}' }
+  payload = { 'customer_id' => customer_id, 'plan' => plan, 'callback_url' => callback_url, 'options' => '{}' }
 
-  addon_bad_auth = RestClient::Resource.new manifest['api']['test'], { :username => bad_user, :password => bad_password }
+  addon_bad_auth = RestClient::Resource.new resource_host, { :username => bad_user, :password => bad_password }
 
   code = nil
   begin
