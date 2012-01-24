@@ -20,4 +20,5 @@ Gem::Specification.new do |s|
   s.require_paths = ["lib"]
 
   s.add_runtime_dependency 'json'
+  s.add_runtime_dependency 'uuid'
 end
