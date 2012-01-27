@@ -44,11 +44,16 @@ Example
 
 If cloned:
 
-    $ bin/af-addon-tester <path to manifest>
+    $ bin/af-addon-tester [-a] <path to manifest>
 
 If Gem:
 
-    $ af-addon-tester <path to manifest>
+    $ af-addon-tester [-a] <path to manifest>
+
+Options:
+
+**-a** &nbsp;&nbsp; Wait for the callback url to called with updated config vars
+
 
 
 ## Meta ##

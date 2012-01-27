@@ -11,7 +11,7 @@ require 'restclient'
 require 'uuid'
 
 puts "AppFog Addon Tester v#{AppFog::AddonTester::VERSION}"
-VERSION = AppFog::AddonTester::VERSION
+
 manifest_path = ARGV.last
 
 do_asyc = ARGV.include?('-a')
@@ -19,7 +19,7 @@ username = nil
 
 begin
   manifest_file = File.open(File.expand_path(manifest_path), 'r')
-  manifest_json = File.read(manifest_file)
+  manifest_json = manifest_file.read
   manifest = JSON.parse(manifest_json)
 
   raise "Missing id" if manifest['id'].nil?
@@ -58,7 +58,7 @@ puts "  SSO Salt: #{bwhite(sso_salt[0..2]+sso_salt[3..-1].gsub(/./,'*'))}"
 puts ""
 
 addon = RestClient::Resource.new resource_host, {:user => username, :password => password}
-headers = { :accept => "application/json", :content_type => "application/json", "User-Agent" => "af-addon-tester/#{VERSION}" }
+headers = { :accept => "application/json", :content_type => "application/json", "User-Agent" => "af-addon-tester/#{AppFog::AddonTester::VERSION}" }
 
 resp = nil
 code = nil
