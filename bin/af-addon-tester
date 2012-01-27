@@ -11,7 +11,7 @@ require 'restclient'
 require 'uuid'
 
 puts "AppFog Addon Tester v#{AppFog::AddonTester::VERSION}"
-
+VERSION = AppFog::AddonTester::VERSION
 manifest_path = ARGV.last
 
 do_asyc = ARGV.include?('-a')
@@ -19,7 +19,7 @@ username = nil
 
 begin
   manifest_file = File.open(File.expand_path(manifest_path), 'r')
-  manifest_json = manifest_file.readlines.to_s
+  manifest_json = File.read(manifest_file)
   manifest = JSON.parse(manifest_json)
 
   raise "Missing id" if manifest['id'].nil?
